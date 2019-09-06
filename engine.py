@@ -5,9 +5,9 @@ import sqlparse
 import re
 import csv
 
-cartesianTable = []
-tabledict = {}
-tables = {}
+cartesianTable = []             #joined table of cartesian product of all rows of tables being used in the query
+tabledict = {}                  #dictionary of table name to list of columns it has
+tables = {}                     #dictionary of table name to Table object with name, cols and data in cols
 
 class Table:
     def __init__(self, name, cols, data):
@@ -68,23 +68,13 @@ def extractMetadata():
 
     # print (tabledict)
 
-# def distinctQuery(querypart, files):
-#     dist_set = set()
-#     maxl = 0
-#     for i in range(len(querypart)):
-#         if len(querypart[i] > maxl):
-#             maxl = len(querypart[i])
-
-#     for j in range(maxl):
-#         temp = []
-#         for i in range(len(querypart)):
-#             temp.append(querypart[i])
-#         dist_set.add(temp) #if not there already
 
 def checkColumn(col):
     global tabledict
     k = list(tabledict.keys())
+    # print (k)
     temp = col.split(".")
+    print (temp)
     found = 0
     if (len(temp) > 1):
         tab = temp[0]
@@ -105,18 +95,87 @@ def checkColumn(col):
                     sys.exit(0)
 
 
+def evaluate(cond):
+    arg = cond[0]
+    checkColumn(arg)
+    print ("yo")
+
+
+def parseWhere(cond):
+    part = cond
+    temp = []
+
+    for k in range(len(part)):
+        minitemp = ""
+        for j in range(len(part[k])):
+            if part[k][j] in ["=",">",">=","<","<="]:
+                if (minitemp != ""):        
+                    temp.append(minitemp)
+                temp.append(part[k][j])
+                minitemp = ""
+            else:
+                minitemp += part[k][j]
+        if (minitemp != ""):        
+            temp.append(minitemp)
+    return temp
+
  
 def whereQuery(query):
     #split on basis of and and or conditions
     condition = query[-1]
     condition = condition.split()[1:]
-    print (condition)
-    #split based on or
-    
-    pass
+
+    beg = 0
+    cond = []
+    # OR = 0
+    # AND = 0
+
+    #only for purposes of constraints of the given problem statement
+    #otherwise outer loop contains all OR statements
+    #inner loop contains all AND statements
+    #last if condition checks if it is the end of the string, and adds the last condition command
+    for c in range(len(condition)):
+        if condition[c] == "or" or condition[c] == "OR":
+            # OR = 1
+            x = slice(beg,c)
+            beg = c + 1
+            cond.append(condition[x])
+            x = slice(c+1, len(condition))
+            cond.append(condition[x])
+
+            for i in range(len(cond)):
+                cond[i] = parseWhere(cond[i])
+            break
+
+
+        elif condition[c] == "and" or condition[c] == "AND":
+            # AND = 1
+            x = slice(beg,c)
+            cond.append(condition[x])
+            x = slice(c+1, len(condition))
+            cond.append(condition[x])
+
+            for i in range(len(cond)):
+                cond[i] = parseWhere(cond[i])
+                res = evaluate(cond[i])
+            break
+
+
+        elif c == len(condition)-1:
+            x = slice(beg,c+1)
+            cond.append(condition[x])
+
+            for i in range(len(cond)):
+                cond[i] = parseWhere(cond[i])
+            break
+
+
+    print (cond)
+
+
 
 def selectQuery(querybits):
-    if querybits[1] == "distinct":
+    if querybits[1] in ["distinct", "DISTINCT"]:
         files = querybits[4]
     else:
         files = querybits[3]
@@ -140,7 +199,7 @@ def selectQuery(querybits):
     last = querybits[-1]
     temp = last.split()
     print (temp)
-    if (temp[0] == "where"):
+    if (temp[0] in  ["where", "WHERE"]):
         whereQuery(querybits)
 
     # if query[1] == "distinct":
@@ -155,6 +214,7 @@ def processQuery(raw):
         if q[-1] != ';':
             print ("Syntax error: end SQL command with semi colon")
             return
+        q = q[:-1]
         # q = q.lower()
         parsed = sqlparse.parse(q)[0].tokens
         # print (parsed)
@@ -172,7 +232,7 @@ def processQuery(raw):
         # print (querybits[5])
         # print (querybits[6])
 
-        if querybits[0] == "select":
+        if querybits[0] in ["select", "SELECT"]:
             selectQuery(querybits)
         else:
             print ("Query type is incorrect or not suppported.")
@@ -190,3 +250,18 @@ def main():
 
 if ( __name__ == "__main__"):
     main()
+
+
+
+# def distinctQuery(querypart, files):
+#     dist_set = set()
+#     maxl = 0
+#     for i in range(len(querypart)):
+#         if len(querypart[i] > maxl):
+#             maxl = len(querypart[i])
+
+#     for j in range(maxl):
+#         temp = []
+#         for i in range(len(querypart)):
+#             temp.append(querypart[i])
+#         dist_set.add(temp) #if not there already
