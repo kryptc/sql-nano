@@ -8,6 +8,7 @@ import csv
 cartesianTable = []             #joined table of cartesian product of all rows of tables being used in the query
 tabledict = {}                  #dictionary of table name to list of columns it has
 tables = {}                     #dictionary of table name to Table object with name, cols and data in cols
+final_cols = []                 #list of all columns in order of cartesian product for all tables
 
 class Table:
     def __init__(self, name, cols, data):
@@ -19,9 +20,15 @@ class Table:
 def fullJoin():
     global tables
     global cartesianTable
+    global final_cols
 
-    final_cols = []
     table_l = list(tables.keys())
+    for i in range(len(table_l)):
+        tab = str(table_l[i])
+        for j in range(len(tabledict[tab])):
+            colname = tab + "." + str(tabledict[tab][j])
+            final_cols.append(colname)
+    # print (final_cols) 
     cartesianTable = copy.deepcopy(tables[table_l[0]].data)
 
     for i in range(1, len(table_l)):
@@ -74,14 +81,18 @@ def checkColumn(col):
     k = list(tabledict.keys())
     # print (k)
     temp = col.split(".")
-    print (temp)
+    # print (temp)
     found = 0
     if (len(temp) > 1):
         tab = temp[0]
         column = temp[1]
+        #check if table name exists
+        if tab not in k:
+            print ("Error: The table named " + str(tab) + " doesn't exist.")
+            sys.exit(0)
         #check if col exists
         if column not in tabledict[str(tab)]:
-            print ("Error: column " + str(column) + " not found in the given table.")
+            print ("Error: Column " + str(column) + " not found in the given table.")
             sys.exit(0)
     else:
         column = temp[0]
@@ -91,14 +102,63 @@ def checkColumn(col):
                     tab = str(x)
                     found = 1
                 else:
-                    print ("Error: not specified which table column " + str(column) + " belongs to.")
+                    print ("Error: Not specified which table column " + str(column) + " belongs to.")
                     sys.exit(0)
+            if not found:
+                print ("Error: Column " + str(column) + " not found in the given table.")
+                sys.exit(0)
+
+
+def findColNum(arg):
+    global final_cols
+    global tables
+
+    k = list(tabledict.keys())
+    temp = arg.split(".")
+    if (len(temp) > 1):
+        tab = temp[0]
+        column = temp[1]
+    else:
+        column = temp[0]
+        for x in k:
+            if column in tabledict[x]:
+                tab = str(x)
+    fullTable = tables[tab].data
+    reqCol = []
+    arg = tab + "." + column
+    for i in range(len(final_cols)):
+        if final_cols[i] == str(arg):
+            colInd = i
+            # print (colInd)
+            return colInd
+    # print (colInd)
+    # for x in range(len(fullTable)):
+    #     reqCol.append(fullTable[x][colInd])
 
 
 def evaluate(cond):
+    global tabledict
+    global tables
+    operator = cond[1]
+
+    ind1,ind2 = -1,-1
     arg = cond[0]
-    checkColumn(arg)
-    print ("yo")
+    try:
+        arg = int(arg)
+
+    except:
+        checkColumn(arg)
+        ind1 = findColNum(arg)
+
+    arg2 = cond[2]
+    try:
+        arg2 = int(arg2)
+
+    except:
+        checkColumn(arg2)
+        ind2 = findColNum(arg2)
+
+
 
 
 def parseWhere(cond):
