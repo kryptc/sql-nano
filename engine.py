@@ -10,6 +10,7 @@ tabledict = {}                  #dictionary of table name to list of columns it 
 tables = {}                     #dictionary of table name to Table object with name, cols and data in cols
 final_cols = []                 #list of all columns in order of cartesian product for all tables
 
+
 class Table:
     def __init__(self, name, cols, data):
         self.name = name
@@ -112,6 +113,7 @@ def checkColumn(col):
 def findColNum(arg):
     global final_cols
     global tables
+    global tabledict
 
     k = list(tabledict.keys())
     temp = arg.split(".")
@@ -123,7 +125,7 @@ def findColNum(arg):
         for x in k:
             if column in tabledict[x]:
                 tab = str(x)
-    fullTable = tables[tab].data
+    # fullTable = tables[tab].data
     reqCol = []
     arg = tab + "." + column
     for i in range(len(final_cols)):
@@ -135,17 +137,40 @@ def findColNum(arg):
     # for x in range(len(fullTable)):
     #     reqCol.append(fullTable[x][colInd])
 
+def evaluate(arg1, ind1, operator, arg2, ind2, i):
+    global cartesianTable
+    if ind1 == -1:      #arg1 is number
+        if ind2 == -1:
+            pass        #arg2 is number
+        else:           #arg2 is a column
+            arg2 = cartesianTable[i][ind2]
+    else:               #arg1 is column
+        arg1 = cartesianTable[i][ind1]
+        if ind2 == -1:
+            pass
+        else:
+            arg2 = cartesianTable[i][ind2]
+    if operator == "=":
+        return arg1 == arg2
+    elif operator == ">":
+        return arg1 > arg2
+    elif operator == ">=":
+        return arg1 >= arg2
+    elif operator == "<":
+        return arg1 < arg2
+    elif operator == "<=":
+        return arg1 <= arg2
 
-def evaluate(cond):
-    global tabledict
-    global tables
+            
+def preEvaluate(cond):
+    global cartesianTable
+
     operator = cond[1]
 
     ind1,ind2 = -1,-1
     arg = cond[0]
     try:
         arg = int(arg)
-
     except:
         checkColumn(arg)
         ind1 = findColNum(arg)
@@ -153,12 +178,21 @@ def evaluate(cond):
     arg2 = cond[2]
     try:
         arg2 = int(arg2)
-
     except:
         checkColumn(arg2)
         ind2 = findColNum(arg2)
-
-
+    # print (ind1, ind2)
+    finalData = []
+    finalRows = []
+    # print (cartesianTable[0][ind1])
+    for i in range(len(cartesianTable)):
+        bool_var = evaluate(arg, ind1, operator, arg2, ind2, i)
+        # print (bool_var)
+        if bool_var:
+            finalData.append(cartesianTable[i])
+            finalRows.append(i)
+    # print (finalRows)
+    return finalRows
 
 
 def parseWhere(cond):
@@ -205,6 +239,10 @@ def whereQuery(query):
 
             for i in range(len(cond)):
                 cond[i] = parseWhere(cond[i])
+
+            res1 = set(preEvaluate(cond[0]))
+            res2 = set(preEvaluate(cond[1]))
+            res = res1 | res2
             break
 
 
@@ -217,7 +255,9 @@ def whereQuery(query):
 
             for i in range(len(cond)):
                 cond[i] = parseWhere(cond[i])
-                res = evaluate(cond[i])
+            res1 = set(preEvaluate(cond[0]))
+            res2 = set(preEvaluate(cond[1]))
+            res = res1 & res2
             break
 
 
@@ -227,18 +267,55 @@ def whereQuery(query):
 
             for i in range(len(cond)):
                 cond[i] = parseWhere(cond[i])
+            res = set(preEvaluate(cond[0]))
             break
+    return res
 
+def checkAggregate()
+def projectColumns(query_cols, table_cols):
+    global cartesianTable
+    global final_cols
+    col_ind = []
+    col_name = []
 
-    print (cond)
+    query_cols = query_cols.replace(",", " ")
+    query_cols = query_cols.split()
 
+    agg, query_cols = checkAggregate(query_cols)
+
+    for i in range(len(query_cols)):
+        checkColumn(query_cols[i])
+        col_ind.append(findColNum(query_cols[i]))
+        col_name.append(final_cols[col_ind[-1]])
+
+    print (str(col_name)[1:-1])
+    disp_set = set()
+
+    for i in range(len(cartesianTable)):
+        row = ""
+        if i in table_cols:
+            for j in range(len(col_ind)):
+                if j == len(col_ind) - 1:
+                    row += str(cartesianTable[i][col_ind[j]])
+                else:
+                    row += str(cartesianTable[i][col_ind[j]]) + ", "
+        if row != "":
+            disp_set.add(row)
+
+    for i in disp_set:
+        print (i)
 
 
 def selectQuery(querybits):
+    global tabledict
+
     if querybits[1] in ["distinct", "DISTINCT"]:
         files = querybits[4]
+        display = querybits[2]
     else:
         files = querybits[3]
+        display = querybits[1]
+
     files = re.findall("[\'\w]+", files)
     # print (files)
 
@@ -254,14 +331,26 @@ def selectQuery(querybits):
 
     #create big cartesian table
     fullJoin()
-
+    global cartesianTable
+    res = [x for x in range(len(cartesianTable))]
     #check for where conditions
     last = querybits[-1]
     temp = last.split()
-    print (temp)
+    # print (temp)
     if (temp[0] in  ["where", "WHERE"]):
-        whereQuery(querybits)
+        res = whereQuery(querybits)
 
+    #project columns
+    if display == "*":
+        display = ""
+        k = list(tabledict.keys())
+        for x in k:
+            if x in files:
+                for j in range(len(tabledict[x])):
+                    display += (str(x) + "." + str(tabledict[x][j]) + ",")
+                # print (display)
+
+    projectColumns(display, res)
     # if query[1] == "distinct":
         #add operations on distincted col
         # cols = query[2]
@@ -282,9 +371,9 @@ def processQuery(raw):
         querybits = []
         for cmd in plist:
             querybits.append(str(cmd))
-        # print (querybits[0])
-        # print (querybits[1])
-        # print (querybits[2])
+        print (querybits[0])
+        print (querybits[1])
+        print (querybits[2])
 
         # print (querybits[3])
         # print (querybits[4])
