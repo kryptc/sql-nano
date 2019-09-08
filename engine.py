@@ -79,8 +79,8 @@ def extractMetadata():
 
 
 def checkColumn(col):
-    global tabledict
-    k = list(tabledict.keys())
+    global tables
+    k = list(tables.keys())
     # print (k)
     temp = col.split(".")
     # print (temp)
@@ -93,13 +93,13 @@ def checkColumn(col):
             print ("Error: The table named " + str(tab) + " doesn't exist.")
             sys.exit(0)
         #check if col exists
-        if column not in tabledict[str(tab)]:
+        if column not in tables[str(tab)].columns:
             print ("Error: Column " + str(column) + " not found in the given table.")
             sys.exit(0)
     else:
         column = temp[0]
         for x in k:
-            if column in tabledict[x]:
+            if column in tables[x].columns:
                 if not found:
                     tab = str(x)
                     found = 1
@@ -114,9 +114,8 @@ def checkColumn(col):
 def findColNum(arg):
     global final_cols
     global tables
-    global tabledict
 
-    k = list(tabledict.keys())
+    k = list(tables.keys())
     temp = arg.split(".")
     if (len(temp) > 1):
         tab = temp[0]
@@ -124,7 +123,7 @@ def findColNum(arg):
     else:
         column = temp[0]
         for x in k:
-            if column in tabledict[x]:
+            if column in tables[x].columns:
                 tab = str(x)
     # fullTable = tables[tab].data
     reqCol = []
@@ -132,11 +131,7 @@ def findColNum(arg):
     for i in range(len(final_cols)):
         if final_cols[i] == str(arg):
             colInd = i
-            # print (colInd)
             return colInd
-    # print (colInd)
-    # for x in range(len(fullTable)):
-    #     reqCol.append(fullTable[x][colInd])
 
 def evaluate(arg1, ind1, operator, arg2, ind2, i):
     global cartesianTable
@@ -170,6 +165,7 @@ def preEvaluate(cond):
 
     ind1,ind2 = -1,-1
     arg = cond[0]
+    no = 0
     try:
         arg = int(arg)
     except:
@@ -182,10 +178,9 @@ def preEvaluate(cond):
     except:
         checkColumn(arg2)
         ind2 = findColNum(arg2)
-    # print (ind1, ind2)
+
     finalData = []
     finalRows = []
-    # print (cartesianTable[0][ind1])
     for i in range(len(cartesianTable)):
         bool_var = evaluate(arg, ind1, operator, arg2, ind2, i)
         # print (bool_var)
@@ -194,6 +189,27 @@ def preEvaluate(cond):
             finalRows.append(i)
     # print (finalRows)
     return finalRows
+
+
+def checkJoin(cond):
+    redundant = []
+    operator = cond[1]
+    ind1,ind2 = -1,-1
+    arg = cond[0]
+    try:
+        arg = int(arg)
+    except:
+        ind1 = findColNum(arg)
+
+    arg2 = cond[2]
+    try:
+        arg2 = int(arg2)
+    except:
+        ind2 = findColNum(arg2)
+        if operator == "=":
+            redundant.append(ind2)
+            # print (ind2)
+    return redundant
 
 
 def parseWhere(cond):
@@ -244,6 +260,10 @@ def whereQuery(query):
             res1 = set(preEvaluate(cond[0]))
             res2 = set(preEvaluate(cond[1]))
             res = res1 | res2
+
+            red1 = set(checkJoin(cond[0]))
+            red2 = set(checkJoin(cond[1]))
+            red = red1 | red2
             break
 
 
@@ -259,6 +279,10 @@ def whereQuery(query):
             res1 = set(preEvaluate(cond[0]))
             res2 = set(preEvaluate(cond[1]))
             res = res1 & res2
+
+            red1 = set(checkJoin(cond[0]))
+            red2 = set(checkJoin(cond[1]))
+            red = red1 | red2
             break
 
 
@@ -269,8 +293,9 @@ def whereQuery(query):
             for i in range(len(cond)):
                 cond[i] = parseWhere(cond[i])
             res = set(preEvaluate(cond[0]))
+            red = checkJoin(cond[0])
             break
-    return res
+    return res,red
 
 def checkAggregate(query_list):
     #aggregate only on single column
@@ -297,7 +322,7 @@ def checkAggregate(query_list):
     return agg, query_list
 
 
-def projectColumns(query_cols, table_cols, distinct):
+def projectColumns(query_cols, table_cols, distinct, redundant):
     global cartesianTable
     global final_cols
     global tables
@@ -308,12 +333,19 @@ def projectColumns(query_cols, table_cols, distinct):
 
     query_cols = query_cols.replace(",", " ")
     query_cols = query_cols.split()
+    # print (query_cols)
 
     agg, query_cols = checkAggregate(query_cols)
 
     for i in range(len(query_cols)):
         checkColumn(query_cols[i])
-        col_ind.append(findColNum(query_cols[i]))
+
+        temp = findColNum(query_cols[i])
+        if temp in redundant:
+            # print (redundant, temp)
+            continue
+        col_ind.append(temp)
+        # print (col_ind)
         col_name.append(final_cols[col_ind[-1]])
 
     if len(query_cols) > 1 or distinct:
@@ -393,11 +425,12 @@ def selectQuery(querybits):
 
     global cartesianTable
     res = [x for x in range(len(cartesianTable))]
+    redundant = set()
     #check for where conditions
     last = querybits[-1]
     temp = last.split()
     if (temp[0] in  ["where", "WHERE"]):
-        res = whereQuery(querybits)
+        res, redundant = whereQuery(querybits)
 
     #project columns
     if display == "*":
@@ -407,13 +440,9 @@ def selectQuery(querybits):
             if x in files:
                 for j in range(len(tabledict[x])):
                     display += (str(x) + "." + str(tabledict[x][j]) + ",")
-                # print (display)
 
-    projectColumns(display, res, dist)
-    # if query[1] == "distinct":
-        #add operations on distincted col
-        # cols = query[2]
-        # distinctQuery(cols, fhandlers)
+    # print (display)
+    projectColumns(display, res, dist, redundant)
 
 
 def processQuery(raw):
@@ -430,15 +459,6 @@ def processQuery(raw):
         querybits = []
         for cmd in plist:
             querybits.append(str(cmd))
-        # print (querybits[0])
-        # print (querybits[1])
-        # print (querybits[2])
-
-        # print (querybits[3])
-        # print (querybits[4])
-
-        # print (querybits[5])
-        # print (querybits[6])
 
         if querybits[0] in ["select", "SELECT"]:
             selectQuery(querybits)
@@ -459,17 +479,3 @@ def main():
 if ( __name__ == "__main__"):
     main()
 
-
-
-# def distinctQuery(querypart, files):
-#     dist_set = set()
-#     maxl = 0
-#     for i in range(len(querypart)):
-#         if len(querypart[i] > maxl):
-#             maxl = len(querypart[i])
-
-#     for j in range(maxl):
-#         temp = []
-#         for i in range(len(querypart)):
-#             temp.append(querypart[i])
-#         dist_set.add(temp) #if not there already
