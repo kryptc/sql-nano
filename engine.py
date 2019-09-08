@@ -133,6 +133,7 @@ def findColNum(arg):
             colInd = i
             return colInd
 
+
 def evaluate(arg1, ind1, operator, arg2, ind2, i):
     global cartesianTable
     if ind1 == -1:      #arg1 is number
@@ -297,6 +298,7 @@ def whereQuery(query):
             break
     return res,red
 
+
 def checkAggregate(query_list):
     #aggregate only on single column
     temp = -1
@@ -416,6 +418,11 @@ def selectQuery(querybits):
         fin = open(os.path.join("./files/", str(files[i]) + ".csv"), "r")
         data = fin.readlines()
         for dat in data:
+            if (dat.find('\"')) == -1:
+                dat = dat.replace(chr(8220),"")
+                dat = dat.replace(chr(8221),"")
+            else:
+                dat = dat.replace("'",",")
             lis.append([int(u) for u in dat.strip().split(',')])
 
         tables[str(files[i])] = Table(str(files[i]), tabledict[str(files[i])], lis)
