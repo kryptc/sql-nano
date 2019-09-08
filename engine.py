@@ -4,6 +4,7 @@ import copy
 import sqlparse
 import re
 import csv
+from functools import reduce
 
 cartesianTable = []             #joined table of cartesian product of all rows of tables being used in the query
 tabledict = {}                  #dictionary of table name to list of columns it has
@@ -271,10 +272,37 @@ def whereQuery(query):
             break
     return res
 
-def checkAggregate()
-def projectColumns(query_cols, table_cols):
+def checkAggregate(query_list):
+    #aggregate only on single column
+    temp = -1
+    agg = -1
+    for i in range(len(query_list)):
+        x = query_list[i]
+        temp = x.find("(")
+        if temp > -1:
+            agg = x[0:temp]
+            agg = agg.lower()
+            if agg == "max":
+                agg = 1
+            elif agg == "min":
+                agg = 2
+            elif agg == "avg":
+                agg = 3
+            elif agg == "sum":
+                agg = 4
+            else:
+                agg = -1
+            query_list[i] = x[temp+1:-1]
+            
+    return agg, query_list
+
+
+def projectColumns(query_cols, table_cols, distinct):
     global cartesianTable
     global final_cols
+    global tables
+    global tabledict
+
     col_ind = []
     col_name = []
 
@@ -288,23 +316,52 @@ def projectColumns(query_cols, table_cols):
         col_ind.append(findColNum(query_cols[i]))
         col_name.append(final_cols[col_ind[-1]])
 
-    print (str(col_name)[1:-1])
-    disp_set = set()
+    if len(query_cols) > 1 or distinct:
+        disp_set = set()
 
-    for i in range(len(cartesianTable)):
-        row = ""
-        if i in table_cols:
-            for j in range(len(col_ind)):
-                if j == len(col_ind) - 1:
-                    row += str(cartesianTable[i][col_ind[j]])
-                else:
-                    row += str(cartesianTable[i][col_ind[j]]) + ", "
-        if row != "":
-            disp_set.add(row)
+        for i in range(len(cartesianTable)):
+            row = ""
+            if i in table_cols:
+                for j in range(len(col_ind)):
+                    if j == len(col_ind) - 1:
+                        row += str(cartesianTable[i][col_ind[j]])
+                    else:
+                        row += str(cartesianTable[i][col_ind[j]]) + ", "
+            if row != "":
+                disp_set.add(row)
+    else:
+        disp_set = []
+        k = list(tables.keys())
+        tab = col_name[0].split(".")[0]
+        col = col_name[0].split(".")[1]
 
-    for i in disp_set:
-        print (i)
+        data = tables[tab].data
+        ind = 0
+        for i in range(len(tabledict[tab])):
+            if tabledict[tab][i] == str(col):
+                ind = i
 
+        for i in range(len(data)):
+            disp_set.append(str(data[i][ind]))
+
+    if agg == -1:
+        print (str(col_name)[1:-1])
+        for i in disp_set:
+            print (i)
+
+    elif agg == 1:
+        print ("max(" + str(col_name)[1:-1] + ")")
+        print (max(disp_set))
+    elif agg == 2:
+        print ("min(" + str(col_name)[1:-1] + ")")
+        print (min(disp_set))
+    elif agg == 3:
+        print ("avg(" + str(col_name)[1:-1] + ")")
+        print (reduce(lambda x,y:float(x) + float(y), disp_set)/float(len(disp_set)))
+    elif agg == 4:
+        print ("sum(" + str(col_name)[1:-1] + ")")
+        print (reduce(lambda x,y:float(x) + float(y), disp_set))
+        
 
 def selectQuery(querybits):
     global tabledict
@@ -312,9 +369,11 @@ def selectQuery(querybits):
     if querybits[1] in ["distinct", "DISTINCT"]:
         files = querybits[4]
         display = querybits[2]
+        dist = 1
     else:
         files = querybits[3]
         display = querybits[1]
+        dist = 0
 
     files = re.findall("[\'\w]+", files)
     # print (files)
@@ -331,12 +390,12 @@ def selectQuery(querybits):
 
     #create big cartesian table
     fullJoin()
+
     global cartesianTable
     res = [x for x in range(len(cartesianTable))]
     #check for where conditions
     last = querybits[-1]
     temp = last.split()
-    # print (temp)
     if (temp[0] in  ["where", "WHERE"]):
         res = whereQuery(querybits)
 
@@ -350,7 +409,7 @@ def selectQuery(querybits):
                     display += (str(x) + "." + str(tabledict[x][j]) + ",")
                 # print (display)
 
-    projectColumns(display, res)
+    projectColumns(display, res, dist)
     # if query[1] == "distinct":
         #add operations on distincted col
         # cols = query[2]
@@ -371,9 +430,9 @@ def processQuery(raw):
         querybits = []
         for cmd in plist:
             querybits.append(str(cmd))
-        print (querybits[0])
-        print (querybits[1])
-        print (querybits[2])
+        # print (querybits[0])
+        # print (querybits[1])
+        # print (querybits[2])
 
         # print (querybits[3])
         # print (querybits[4])
